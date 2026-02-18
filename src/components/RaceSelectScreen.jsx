@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { RACES } from '../data/races.js'
-import { validateRunner } from '../utils/runner.js'
+import { playNavigate } from '../utils/sound.js'
 
 function DifficultyDots({ level }) {
   return (
@@ -12,63 +12,57 @@ function DifficultyDots({ level }) {
   )
 }
 
-export default function RaceSelectScreen({ state, setScreen, goBack, selectRunner, editRunner }) {
-  const { personalBests, runners, selectedRunnerId, ownedInstructions } = state
+export default function RaceSelectScreen({ state, setScreen, goBack, startChallenge }) {
+  const { personalBests } = state
+  const races = Object.values(RACES)
+  const [focused, setFocused] = useState(0)
 
-  const selectedRunner = runners.find(r => r.id === selectedRunnerId)
-  const runnerValid = selectedRunner
-    ? validateRunner(selectedRunner.code, ownedInstructions)
-    : null
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+      if (e.key === 'w') {
+        e.preventDefault()
+        playNavigate()
+        setFocused(f => Math.max(0, f - 1))
+      } else if (e.key === 's') {
+        e.preventDefault()
+        playNavigate()
+        setFocused(f => Math.min(races.length - 1, f + 1))
+      } else if (e.key === 'a' || e.key === 'Escape') {
+        e.preventDefault()
+        goBack() // goBack plays playConfirm()
+      } else if ((e.key === 'd' || e.key === 'Enter') && !races[focused]?.locked) {
+        e.preventDefault()
+        startChallenge(races[focused].id) // startChallenge plays playConfirm()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [focused, goBack, startChallenge, races])
 
   return (
     <div className="screen race-select-screen">
       <div className="screen-header">
         <button className="btn-back" onClick={goBack}>← BACK</button>
-        <div className="screen-title">SELECT CIRCUIT</div>
+        <div className="screen-title">SELECT CHALLENGE</div>
       </div>
 
-      {/* Runner selector */}
-      <div className="runner-selector">
-        <div className="runner-selector-label muted">SELECTED RUNNER</div>
-        {selectedRunner ? (
-          <div className="runner-selector-info">
-            <span className={`runner-selector-name ${runnerValid?.ok ? '' : 'invalid'}`}>
-              {selectedRunner.name}
-            </span>
-            <span className={`runner-status-badge sm ${runnerValid?.ok ? 'ok' : 'err'}`}>
-              {runnerValid?.ok ? '✓ READY' : '✗ INVALID'}
-            </span>
-            {!runnerValid?.ok && (
-              <span className="runner-selector-issues muted">
-                {runnerValid?.missing?.length > 0
-                  ? `Missing: ${runnerValid.missing.join(', ')}`
-                  : runnerValid?.errors?.length > 0
-                    ? `${runnerValid.errors.length} syntax error(s)`
-                    : 'Not ready'}
-              </span>
-            )}
-          </div>
-        ) : (
-          <div className="runner-selector-info">
-            <span className="muted">No runner selected</span>
-          </div>
-        )}
-        <div className="runner-selector-actions">
-          <button className="btn-ghost btn-sm" onClick={() => setScreen('runners')}>Change</button>
-          {selectedRunner && (
-            <button className="btn-ghost btn-sm" onClick={() => editRunner(selectedRunner.id)}>Edit</button>
-          )}
-        </div>
+      <div className="challenge-list-hint muted">
+        <span className="kw">W/S</span> navigate · <span className="kw">D</span> or Enter to select
       </div>
 
-      {/* Circuit list */}
+      {/* Challenge list */}
       <div className="circuit-list">
-        {Object.values(RACES).map(race => {
+        {races.map((race, idx) => {
           const pb = personalBests?.[race.id]
-          const canStart = !race.locked && runnerValid?.ok
 
           return (
-            <div key={race.id} className={`circuit-card ${race.locked ? 'locked' : ''}`}>
+            <div
+              key={race.id}
+              className={`circuit-card${race.locked ? ' locked' : ''}${focused === idx ? ' focused' : ''}`}
+              onMouseEnter={() => setFocused(idx)}
+              onClick={() => { if (!race.locked) startChallenge(race.id) }}
+            >
               <div className="circuit-card-left">
                 <div className="circuit-card-header">
                   <span className="circuit-name">{race.name}</span>
@@ -98,14 +92,9 @@ export default function RaceSelectScreen({ state, setScreen, goBack, selectRunne
                 {!race.locked && (
                   <button
                     className="btn-primary btn-start-race"
-                    disabled={!canStart}
-                    onClick={() => {
-                      if (!selectedRunnerId) return
-                      setScreen('race')
-                    }}
-                    title={!runnerValid?.ok ? 'Runner is not race-ready' : undefined}
+                    onClick={(e) => { e.stopPropagation(); startChallenge(race.id) }}
                   >
-                    START
+                    SELECT
                   </button>
                 )}
               </div>

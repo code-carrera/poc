@@ -1,12 +1,14 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import { useGameState } from './hooks/useGameState.js'
 import GarageScreen from './components/GarageScreen.jsx'
 import MarketplaceScreen from './components/MarketplaceScreen.jsx'
 import RunnersScreen from './components/RunnersScreen.jsx'
 import IDEScreen from './components/IDEScreen.jsx'
 import RaceSelectScreen from './components/RaceSelectScreen.jsx'
+import RaceRunnerSelectScreen from './components/RaceRunnerSelectScreen.jsx'
 import RaceScreen from './components/RaceScreen.jsx'
 import TutorialScreen from './components/TutorialScreen.jsx'
+import { playNavigate, playConfirm } from './utils/sound.js'
 
 export default function App() {
   const {
@@ -22,34 +24,74 @@ export default function App() {
     raceFinished,
     visitManual,
     reset,
+    setChallengeRunner,
+    setCurrentRace,
   } = useGameState()
 
   const [navHistory, setNavHistory] = useState([])
+  const [fading, setFading] = useState(false)
+  const pendingNav = useRef(false)
+
+  // Performs a fade-to-black → screen switch → fade-in sequence
+  const fadeTo = useCallback((screen, before) => {
+    if (pendingNav.current) return
+    pendingNav.current = true
+    setFading(true)
+    setTimeout(() => {
+      before?.()
+      setScreen(screen)
+      // Two rAF ensures the new screen renders before we fade in
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setFading(false)
+          playNavigate()
+          pendingNav.current = false
+        })
+      })
+    }, 220)
+  }, [setScreen])
 
   const navigate = useCallback((screen) => {
     setNavHistory(prev => [...prev, state.screen])
-    if (screen === 'tutorial' && !state.hasVisitedManual) visitManual()
-    setScreen(screen)
-  }, [state.screen, state.hasVisitedManual, setScreen, visitManual])
+    playConfirm()
+    fadeTo(screen, () => {
+      if (screen === 'tutorial' && !state.hasVisitedManual) visitManual()
+    })
+  }, [state.screen, state.hasVisitedManual, visitManual, fadeTo])
 
   const goBack = useCallback(() => {
-    setNavHistory(prev => {
-      const dest = prev.length > 0 ? prev[prev.length - 1] : 'garage'
-      setScreen(dest)
-      return prev.slice(0, -1)
-    })
-  }, [setScreen])
+    const dest = navHistory.length > 0 ? navHistory[navHistory.length - 1] : 'garage'
+    setNavHistory(prev => prev.slice(0, -1))
+    playConfirm()
+    fadeTo(dest)
+  }, [navHistory, fadeTo])
 
   // Wrap editRunner and createRunner to also push history
   const editRunnerNav = useCallback((id) => {
     setNavHistory(prev => [...prev, state.screen])
-    editRunner(id)
-  }, [state.screen, editRunner])
+    playConfirm()
+    fadeTo('ide', () => editRunner(id))
+  }, [state.screen, editRunner, fadeTo])
 
   const createRunnerNav = useCallback(() => {
     setNavHistory(prev => [...prev, state.screen])
-    createRunner()
-  }, [state.screen, createRunner])
+    playConfirm()
+    fadeTo('ide', () => createRunner())
+  }, [state.screen, createRunner, fadeTo])
+
+  // Start a race: go to runner select screen for that race
+  const startChallenge = useCallback((raceId) => {
+    setNavHistory(prev => [...prev, state.screen])
+    playConfirm()
+    fadeTo('raceRunnerSelect', () => setCurrentRace(raceId))
+  }, [state.screen, setCurrentRace, fadeTo])
+
+  // Confirm runner selection and enter race
+  const startRace = useCallback(() => {
+    setNavHistory(prev => [...prev, state.screen])
+    playConfirm()
+    fadeTo('race')
+  }, [state.screen, fadeTo])
 
   const common = { state, setScreen: navigate, goBack }
 
@@ -86,7 +128,15 @@ export default function App() {
     raceSelect: (
       <RaceSelectScreen
         {...common}
-        selectRunner={selectRunner}
+        startChallenge={startChallenge}
+      />
+    ),
+
+    raceRunnerSelect: (
+      <RaceRunnerSelectScreen
+        {...common}
+        setChallengeRunner={setChallengeRunner}
+        startRace={startRace}
         editRunner={editRunnerNav}
       />
     ),
@@ -104,6 +154,7 @@ export default function App() {
   return (
     <div className="app">
       {screens[state.screen] ?? screens.garage}
+      <div className={`fade-overlay${fading ? ' active' : ''}`} />
     </div>
   )
 }

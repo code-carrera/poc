@@ -2,26 +2,34 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { assemble } from '../vm/assembler.js'
 import { execute } from '../vm/interpreter.js'
 import { RACE, PROCESSOR_HZ, generateRace, getCarPosition, buildCircuitPath, buildPartialPath, CIRCUIT_WAYPOINTS } from '../race/circuit.js'
+import { playNavigate } from '../utils/sound.js'
 
 const CIRCUIT_PATH = buildCircuitPath()
 const MAX_LOG = 6
 const SLIDER_MIN = 0
 const SLIDER_MAX = 100
-const RACE_ID = 'circuit-01'
 const CHART_INTERVAL_MS = 2000
-const CHART_WINDOW = 20  // fixed number of x-axis slots; curve slides left as new points arrive
+const CHART_WINDOW = 20
 
-// ─── Mini timeseries chart (fixed x-axis window, slides left) ─────────────────
+// 6 chart slot configs: 3 active + 3 reserved (null = empty slot)
+const CHART_CONFIGS = [
+  { key: 'perUnit',    color: '#e67e22', label: 'avg cyc / unit'    },
+  { key: 'perSuccess', color: '#4ade80', label: 'avg cyc / correct' },
+  { key: 'perFailure', color: '#f87171', label: 'avg cyc / wrong'   },
+  null,
+  null,
+  null,
+]
+
+// ─── Mini timeseries chart ─────────────────────────────────────────────────────
 function MiniChart({ data, color, label }) {
-  // data is always <= CHART_WINDOW points; x-axis is fixed to CHART_WINDOW slots
   const W = 200, H = 36
   const N = CHART_WINDOW
 
   const vals = data.filter(v => v !== null && v !== undefined)
   const latest = vals[vals.length - 1]
 
-  // Map index within fixed window (right-aligned: latest = slot N-1)
-  const offset = N - data.length  // how many empty slots on the left
+  const offset = N - data.length
   const toX = i => ((i + offset) / (N - 1)) * W
   const toY = v => {
     const min = Math.min(...vals)
@@ -36,8 +44,7 @@ function MiniChart({ data, color, label }) {
     if (v === null) return
     const x = toX(i)
     if (firstX === null) firstX = x
-    const cmd = d === '' ? 'M' : 'L'
-    d += `${cmd} ${x.toFixed(1)} ${toY(v).toFixed(1)} `
+    d += `${d === '' ? 'M' : 'L'} ${x.toFixed(1)} ${toY(v).toFixed(1)} `
   })
 
   const hasCurve = d !== '' && vals.length >= 2
@@ -56,7 +63,6 @@ function MiniChart({ data, color, label }) {
       <svg viewBox={`0 0 ${W} ${H}`} className="mini-chart-svg" preserveAspectRatio="none">
         {hasCurve && <path d={fill} fill={color} opacity="0.12" />}
         {hasCurve && <path d={d} fill="none" stroke={color} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />}
-        {/* x-axis grid line */}
         <line x1="0" y1={H - 0.5} x2={W} y2={H - 0.5} stroke="#333" strokeWidth="1" vectorEffect="non-scaling-stroke" />
       </svg>
     </div>
@@ -102,7 +108,27 @@ function SliderControl({ value }) {
         <div className="slider-fill" style={{ width: `${pct}%` }} />
         <div className="slider-thumb" style={{ left: `calc(${pct}% - 6px)` }} />
       </div>
-      <div className="slider-hint muted">← → ±1  ·  Shift ±10  (during race)</div>
+      <div className="slider-hint muted">A/D ±1 · Shift ±10 (during race)</div>
+    </div>
+  )
+}
+
+// ─── Fuel bar ─────────────────────────────────────────────────────────────────
+function FuelBar({ remaining, total }) {
+  const pct = (remaining / total) * 100
+  const low = pct < 25
+  return (
+    <div className="fuel-panel">
+      <div className="fuel-header">
+        <span className="fuel-label muted">FUEL</span>
+        <span className={`fuel-val${low ? ' fail' : ''}`}>{remaining}</span>
+      </div>
+      <div className="fuel-track">
+        <div
+          className={`fuel-fill${low ? ' low' : ''}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   )
 }
@@ -119,7 +145,6 @@ function ResultRow({ entry }) {
   )
 }
 
-// ─── Sliding-window point appender ───────────────────────────────────────────
 function addPoint(setter, value) {
   setter(prev => {
     const next = [...prev, value]
@@ -129,10 +154,14 @@ function addPoint(setter, value) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
-  const { ownedInstructions, personalBests, selectedRunnerId, runners } = state
-  const selectedRunner = runners.find(r => r.id === selectedRunnerId) ?? runners[0]
+  const { ownedInstructions, personalBests, currentRaceId, challengeRunnerIds, runners } = state
+
+  // Resolve runner for this race
+  const raceId = currentRaceId ?? 'circuit-01'
+  const runnerId = challengeRunnerIds?.[raceId] ?? state.selectedRunnerId ?? runners[0]?.id
+  const selectedRunner = runners.find(r => r.id === runnerId) ?? runners[0]
   const code = selectedRunner?.code ?? ''
-  const pb = personalBests?.[RACE_ID]
+  const pb = personalBests?.[raceId]
 
   const [phase, setPhase] = useState('ready')
   const [sliderValue, setSliderValue] = useState(0)
@@ -147,9 +176,9 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
   const [compileError, setCompileError] = useState(null)
   const [finalResult, setFinalResult] = useState(null)
 
-  const [chartCyclesPerUnit, setChartCyclesPerUnit] = useState([])
-  const [chartCyclesPerSuccess, setChartCyclesPerSuccess] = useState([])
-  const [chartCyclesPerFailure, setChartCyclesPerFailure] = useState([])
+  const [chartPerUnit, setChartPerUnit] = useState([])
+  const [chartPerSuccess, setChartPerSuccess] = useState([])
+  const [chartPerFailure, setChartPerFailure] = useState([])
 
   const sliderRef = useRef(sliderValue)
   sliderRef.current = sliderValue
@@ -170,11 +199,19 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
     setRaceData(generateRace())
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Slider control: A/D (Shift for ±10)
   useEffect(() => {
     if (phase !== 'racing') return
-    const handler = e => {
-      if (e.key === 'ArrowLeft') { setSliderValue(v => Math.max(SLIDER_MIN, v + (e.shiftKey ? -10 : -1))); e.preventDefault() }
-      else if (e.key === 'ArrowRight') { setSliderValue(v => Math.min(SLIDER_MAX, v + (e.shiftKey ? 10 : 1))); e.preventDefault() }
+    const handler = (e) => {
+      if (e.key === 'a') {
+        e.preventDefault()
+        playNavigate()
+        setSliderValue(v => Math.max(SLIDER_MIN, v + (e.shiftKey ? -10 : -1)))
+      } else if (e.key === 'd') {
+        e.preventDefault()
+        playNavigate()
+        setSliderValue(v => Math.min(SLIDER_MAX, v + (e.shiftKey ? 10 : 1)))
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -209,17 +246,17 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
       const result = { unitsUsed: unitIndexRef.current, totalCycles: totalCyclesRef.current, correct: correctRef.current, date: new Date().toISOString() }
       setFinalResult(result)
       setPhase(finished ? 'finished' : 'dnf')
-      if (finished) raceFinished(RACE_ID, result, RACE.reward)
+      if (finished) raceFinished(raceId, result, RACE.reward)
     }
-  }, [compiled, raceData, ownedInstructions, raceFinished])
+  }, [compiled, raceData, ownedInstructions, raceFinished, raceId])
 
   const sampleChart = useCallback(() => {
     const u = unitIndexRef.current
     const c = correctRef.current
     const w = wrongRef.current
-    addPoint(setChartCyclesPerUnit,    u > 0 ? Math.round(totalCyclesRef.current / u) : null)
-    addPoint(setChartCyclesPerSuccess, c > 0 ? Math.round(successCyclesRef.current / c) : null)
-    addPoint(setChartCyclesPerFailure, w > 0 ? Math.round(failureCyclesRef.current / w) : null)
+    addPoint(setChartPerUnit,    u > 0 ? Math.round(totalCyclesRef.current / u) : null)
+    addPoint(setChartPerSuccess, c > 0 ? Math.round(successCyclesRef.current / c) : null)
+    addPoint(setChartPerFailure, w > 0 ? Math.round(failureCyclesRef.current / w) : null)
   }, [])
 
   const startRace = useCallback(() => {
@@ -227,7 +264,7 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
     totalCyclesRef.current = 0; successCyclesRef.current = 0; failureCyclesRef.current = 0
     setStep(0); setUnitIndex(0); setCorrect(0); setWrong(0); setTotalCycles(0)
     setLog([]); setFinalResult(null)
-    setChartCyclesPerUnit([]); setChartCyclesPerSuccess([]); setChartCyclesPerFailure([])
+    setChartPerUnit([]); setChartPerSuccess([]); setChartPerFailure([])
     setPhase('racing')
     intervalRef.current = setInterval(() => processUnit(), RACE.unitInterval)
     chartIntervalRef.current = setInterval(() => sampleChart(), CHART_INTERVAL_MS)
@@ -243,6 +280,9 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
     clearInterval(chartIntervalRef.current)
     goBack()
   }
+
+  // Chart data map
+  const chartData = { perUnit: chartPerUnit, perSuccess: chartPerSuccess, perFailure: chartPerFailure }
 
   if (compileError) {
     return (
@@ -270,21 +310,24 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
         </div>
         <div className="race-header-right">
           <span className="hz-badge">{PROCESSOR_HZ} Hz</span>
-          <span className="hs step">{step}<span className="hs-label">/{RACE.steps}</span></span>
           <span className="hs cycles">{totalCycles.toLocaleString()}<span className="hs-label"> cyc</span></span>
           {pb && <span className="hs pb">PB {pb.unitsUsed}u</span>}
         </div>
       </div>
 
       <div className="race-body">
-        {/* Left: circuit + charts above progress bar */}
+        {/* Left: charts + circuit + progress */}
         <div className="race-left">
           <div className="race-left-main">
-            {/* Charts: to the left of circuit, wider than tall */}
+            {/* 6-slot chart panel */}
             <div className="race-charts">
-              <MiniChart data={chartCyclesPerUnit}    color="#e67e22" label="avg cyc / unit" />
-              <MiniChart data={chartCyclesPerSuccess} color="#4ade80" label="avg cyc / correct" />
-              <MiniChart data={chartCyclesPerFailure} color="#f87171" label="avg cyc / wrong" />
+              {CHART_CONFIGS.map((cfg, i) =>
+                cfg ? (
+                  <MiniChart key={i} data={chartData[cfg.key]} color={cfg.color} label={cfg.label} />
+                ) : (
+                  <div key={i} className="mini-chart-slot-empty" />
+                )
+              )}
             </div>
             <div className="circuit-wrap">
               <CircuitMap step={step} totalSteps={RACE.steps} />
@@ -300,7 +343,7 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
 
           {phase === 'ready' && (
             <button className="btn-primary btn-start" disabled={!compiled} onClick={startRace}>
-              START RACE
+              START
             </button>
           )}
 
@@ -323,20 +366,19 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
               )}
               <div className="result-actions">
                 <button className="btn-primary" onClick={startRace}>RETRY</button>
-                <button className="btn-ghost" onClick={goBack}>CIRCUITS</button>
+                <button className="btn-ghost" onClick={goBack}>CHALLENGES</button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Right: metrics + slider + log */}
+        {/* Right: metrics + fuel + slider + log */}
         <div className="race-right">
-          <div className="metrics-grid">
+          <div className="metrics-grid-2">
             <div className="metric"><div className="metric-val ok">{correct}</div><div className="metric-label">CORRECT</div></div>
             <div className="metric"><div className="metric-val fail">{wrong}</div><div className="metric-label">WRONG</div></div>
-            <div className="metric"><div className="metric-val">{unitsLeft}</div><div className="metric-label">REMAINING</div></div>
-            <div className="metric"><div className="metric-val accent">{step}</div><div className="metric-label">STEPS</div></div>
           </div>
+          <FuelBar remaining={unitsLeft} total={RACE.totalUnits} />
           <SliderControl value={sliderValue} />
           <div className="log-panel">
             <div className="log-header muted">LAST RESULTS</div>

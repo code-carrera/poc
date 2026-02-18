@@ -20,7 +20,9 @@ function loadPersisted() {
     const saved = JSON.parse(raw)
     return {
       ...saved,
-      ownedInstructions: new Set(saved.ownedInstructions ?? []),
+      ownedInstructions:  new Set(saved.ownedInstructions ?? []),
+      challengeRunnerIds: saved.challengeRunnerIds ?? {},
+      currentRaceId:      saved.currentRaceId ?? null,
     }
   } catch {
     return null
@@ -44,7 +46,9 @@ const freshState = {
   ownedInstructions: new Set(),
   runners: [defaultRunner],
   editingRunnerId: null,        // runner open in IDE
-  selectedRunnerId: 'runner-default', // runner selected for racing
+  selectedRunnerId: 'runner-default', // legacy: used by RunnersScreen SELECT badge
+  challengeRunnerIds: {},       // { raceId: runnerId } — runner chosen per challenge
+  currentRaceId: null,          // race being prepared / running
   personalBests: {},            // { 'circuit-01': { unitsUsed, totalCycles, correct, date } }
   racesCompleted: 0,
   hasVisitedManual: false,
@@ -83,7 +87,7 @@ function reducer(state, action) {
         ...state,
         runners: [...state.runners, runner],
         editingRunnerId: runner.id,
-        screen: 'ide',
+        // screen navigation handled by App.jsx
       }
       break
     }
@@ -114,8 +118,20 @@ function reducer(state, action) {
       next = { ...state, selectedRunnerId: action.id }
       break
 
+    case 'SET_CHALLENGE_RUNNER':
+      next = {
+        ...state,
+        challengeRunnerIds: { ...state.challengeRunnerIds, [action.raceId]: action.runnerId },
+      }
+      break
+
+    case 'SET_CURRENT_RACE':
+      next = { ...state, currentRaceId: action.raceId }
+      break
+
     case 'EDIT_RUNNER':
-      next = { ...state, editingRunnerId: action.id, screen: 'ide' }
+      next = { ...state, editingRunnerId: action.id }
+      // screen navigation handled by App.jsx
       break
 
     case 'RACE_FINISHED': {
@@ -162,8 +178,10 @@ export function useGameState() {
     deleteRunner:     useCallback(id => dispatch({ type: 'DELETE_RUNNER', id }), []),
     selectRunner:     useCallback(id => dispatch({ type: 'SELECT_RUNNER', id }), []),
     editRunner:       useCallback(id => dispatch({ type: 'EDIT_RUNNER', id }), []),
-    raceFinished:     useCallback((raceId, result, reward) => dispatch({ type: 'RACE_FINISHED', raceId, result, reward }), []),
-    visitManual:      useCallback(() => dispatch({ type: 'VISIT_MANUAL' }), []),
-    reset:            useCallback(() => dispatch({ type: 'RESET' }), []),
+    raceFinished:        useCallback((raceId, result, reward) => dispatch({ type: 'RACE_FINISHED', raceId, result, reward }), []),
+    visitManual:         useCallback(() => dispatch({ type: 'VISIT_MANUAL' }), []),
+    reset:               useCallback(() => dispatch({ type: 'RESET' }), []),
+    setChallengeRunner:  useCallback((raceId, runnerId) => dispatch({ type: 'SET_CHALLENGE_RUNNER', raceId, runnerId }), []),
+    setCurrentRace:      useCallback(raceId => dispatch({ type: 'SET_CURRENT_RACE', raceId }), []),
   }
 }
