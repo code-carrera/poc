@@ -229,21 +229,22 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
   useEffect(() => {
     if (phase !== 'racing') return
     const handler = (e) => {
-      if (e.key === 'a' || e.key === 'd') {
+      const key = e.key.toLowerCase()
+      if (key === 'a' || key === 'd') {
         e.preventDefault()
         playNavigate()
-        const delta = e.key === 'd' ? (e.shiftKey ? 10 : 1) : (e.shiftKey ? -10 : -1)
+        const delta = key === 'd' ? (e.shiftKey ? 10 : 1) : (e.shiftKey ? -10 : -1)
         const cur = activeSliderRef.current
         setSliderValues(prev => {
           const next = [...prev]
           next[cur] = Math.max(SLIDER_MIN, Math.min(SLIDER_MAX, prev[cur] + delta))
           return next
         })
-      } else if (e.key === 'w' || e.key === 's') {
+      } else if (key === 'w' || key === 's') {
         e.preventDefault()
         if (activeSlotIndices.length <= 1) return
         setActiveSlider(prev => {
-          const dir = e.key === 's' ? 1 : -1
+          const dir = key === 's' ? 1 : -1
           const idx = activeSlotIndices.indexOf(prev)
           const nextIdx = (idx + dir + activeSlotIndices.length) % activeSlotIndices.length
           return activeSlotIndices[nextIdx]
