@@ -2,7 +2,7 @@ const REGISTERS = new Set(['r0', 'r1', 'r2', 'r3'])
 
 const OPCODES = new Set([
   'MOV', 'LOAD', 'LEN', 'ADD', 'SUB', 'CMP',
-  'JGT', 'JLT', 'JEQ', 'JMP', 'SLIDER', 'RET',
+  'JGT', 'JLT', 'JEQ', 'JMP', 'SLIDER_1', 'SLIDER_2', 'SLIDER_3', 'RET',
 ])
 
 function parseSrc(token) {
@@ -30,7 +30,7 @@ function parseLabel(token) {
  *   { op: 'SUB',    dst: 'r0', src: {type, ...} }
  *   { op: 'CMP',    left: 'r0', src: {type, ...} }
  *   { op: 'JGT'|'JLT'|'JEQ'|'JMP', label: 'name' }
- *   { op: 'SLIDER', dst: 'r0' }
+ *   { op: 'SLIDER_1'|'SLIDER_2'|'SLIDER_3', dst: 'r0' }
  *   { op: 'RET',    src: {type:'reg', name:'r0'} }
  */
 export function assemble(source) {
@@ -120,9 +120,11 @@ export function assemble(source) {
         instr = { op, label }
         break
       }
-      case 'SLIDER': {
+      case 'SLIDER_1':
+      case 'SLIDER_2':
+      case 'SLIDER_3': {
         const dst = tokens[1]
-        if (!REGISTERS.has(dst)) { errors.push(`Line ${lineNo + 1}: SLIDER expects register`); break }
+        if (!REGISTERS.has(dst)) { errors.push(`Line ${lineNo + 1}: ${op} expects register`); break }
         instr = { op, dst }
         break
       }

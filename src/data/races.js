@@ -16,12 +16,16 @@ export const RACES = {
   'circuit-02': {
     id: 'circuit-02',
     name: 'Circuit 02',
-    subtitle: 'Coming Soon',
-    description: 'A harder challenge awaits. Stay tuned.',
-    steps: 30,
-    totalUnits: 150,
+    subtitle: 'Even & Odd',
+    description:
+      'Two hidden thresholds — one for even first elements, one for odd. ' +
+      'Use SLIDER_1 for the even threshold and SLIDER_2 for the odd one. ' +
+      'Same rule: arr[0] > threshold → MAX; otherwise → SUM. ' +
+      'Discover both thresholds in real-time while the race runs.',
+    steps: 20,
+    totalUnits: 100,
     reward: 200,
-    locked: true,
+    locked: false,
     difficulty: 2,
   },
 }

@@ -94,6 +94,34 @@ export function generateRace() {
 }
 
 /**
+ * Circuit 02 — Even & Odd.
+ * Two independent hidden thresholds: one for arrays whose first element is even,
+ * one for arrays whose first element is odd.
+ * Logic: arr[0] > threshold → return MAX(arr); else → return SUM(arr).
+ * SLIDER_1 maps to thresholdEven, SLIDER_2 to thresholdOdd.
+ *
+ * Thresholds are guaranteed far apart: one in [20,35], one in [65,80].
+ * This ensures a ~30+ point gap so a single-slider runner suffers ~30% error rate.
+ */
+export function generateRace2() {
+  const low  = 20 + Math.floor(Math.random() * 16)   // [20, 35]
+  const high = 65 + Math.floor(Math.random() * 16)   // [65, 80]
+  const [thresholdEven, thresholdOdd] = Math.random() < 0.5 ? [low, high] : [high, low]
+  let s = Date.now()
+  const lcg = () => { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 0xffffffff }
+  const units = Array.from({ length: RACE.totalUnits }, () => {
+    const length = 5 + Math.floor(lcg() * 6)
+    const arr = Array.from({ length }, () => 1 + Math.floor(lcg() * 100))
+    const isEven = arr[0] % 2 === 0
+    const threshold = isEven ? thresholdEven : thresholdOdd
+    const needsMax = arr[0] > threshold
+    const expected = needsMax ? Math.max(...arr) : arr.reduce((a, b) => a + b, 0)
+    return { arr, expected, needsMax }
+  })
+  return { thresholdEven, thresholdOdd, units }
+}
+
+/**
  * Build a partial Catmull-Rom path through waypoints 0..nSteps (open curve).
  */
 export function buildPartialPath(nSteps) {

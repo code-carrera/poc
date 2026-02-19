@@ -6,10 +6,11 @@ function resolve(src, regs) {
 }
 
 /**
- * Execute a program on a given array with a slider value.
+ * Execute a program on a given array with slider values.
+ * sliderValues: [s1, s2, s3] — one value per SLIDER_N slot.
  * Returns { result: number, cycles: number } or { error: string, cycles: number }
  */
-export function execute({ program, labels, arr, sliderValue, ownedInstructions }) {
+export function execute({ program, labels, arr, sliderValues, ownedInstructions }) {
   const regs = { r0: 0, r1: 0, r2: 0, r3: 0 }
   const flags = { gt: false, eq: false, lt: false }
   let pc = 0
@@ -78,8 +79,18 @@ export function execute({ program, labels, arr, sliderValue, ownedInstructions }
         pc = labels[instr.label]
         break
 
-      case 'SLIDER':
-        regs[instr.dst] = sliderValue
+      case 'SLIDER_1':
+        regs[instr.dst] = (sliderValues ?? [])[0] ?? 0
+        pc++
+        break
+
+      case 'SLIDER_2':
+        regs[instr.dst] = (sliderValues ?? [])[1] ?? 0
+        pc++
+        break
+
+      case 'SLIDER_3':
+        regs[instr.dst] = (sliderValues ?? [])[2] ?? 0
         pc++
         break
 

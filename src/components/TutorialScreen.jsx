@@ -56,7 +56,8 @@ export default function TutorialScreen({ setScreen, goBack }) {
               <div className="tut-row"><Code>JLT label</Code><span>Jump if last CMP: first &lt; second</span></div>
               <div className="tut-row"><Code>JEQ label</Code><span>Jump if last CMP: equal</span></div>
               <div className="tut-row"><Code>JMP label</Code><span>Unconditional jump</span></div>
-              <div className="tut-row"><Code>SLIDER rx</Code><span>Read the current slider value into <Code>rx</Code></span></div>
+              <div className="tut-row"><Code>SLIDER_1 rx</Code><span>Read slider 1 value into <Code>rx</Code> (use for first threshold)</span></div>
+              <div className="tut-row"><Code>SLIDER_2 rx</Code><span>Read slider 2 value into <Code>rx</Code> (use for second threshold)</span></div>
               <div className="tut-row"><Code>RET rx</Code><span>Return the value of <Code>rx</Code> as your answer</span></div>
             </div>
             <p className="muted tut-note">Labels are defined by ending a line with <Code>:</Code> (e.g., <Code>my_loop:</Code>). Comments start with <Code>;</Code>.</p>
@@ -72,7 +73,7 @@ export default function TutorialScreen({ setScreen, goBack }) {
             </ul>
             <p>
               The <strong>threshold is hidden and changes every race</strong>. You must discover it by watching
-              the results and adjusting the <strong>SLIDER</strong>:
+              the results and adjusting <strong>SLIDER_1</strong>:
             </p>
             <ul className="tut-list">
               <li>If arrays with <em>large</em> first elements are returning wrong answers → your slider is too high (treating MAX cases as SUM)</li>
@@ -81,11 +82,12 @@ export default function TutorialScreen({ setScreen, goBack }) {
             </ul>
           </Section>
 
-          <Section title="The Slider">
+          <Section title="The Sliders">
             <p>
-              During a race, use <strong>← →</strong> to adjust the slider by ±1, and <strong>Shift + ← →</strong> for ±10.
-              The slider value is read by the <Code>SLIDER</Code> instruction each time a new work unit is processed —
-              so changes take effect immediately on the next unit.
+              During a race, use <strong>A/D</strong> to adjust the active slider by ±1, and <strong>Shift+A/D</strong> for ±10.
+              The value is read by <Code>SLIDER_1</Code> / <Code>SLIDER_2</Code> each time a new work unit is processed —
+              changes take effect immediately on the next unit.
+              On circuits with multiple sliders, use <strong>W/S</strong> to switch between them.
             </p>
           </Section>
 

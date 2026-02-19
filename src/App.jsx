@@ -19,7 +19,6 @@ export default function App() {
     createRunner,
     updateRunner,
     deleteRunner,
-    selectRunner,
     editRunner,
     raceFinished,
     visitManual,
@@ -111,7 +110,6 @@ export default function App() {
         {...common}
         createRunner={createRunnerNav}
         deleteRunner={deleteRunner}
-        selectRunner={selectRunner}
         editRunner={editRunnerNav}
       />
     ),
@@ -121,7 +119,6 @@ export default function App() {
         {...common}
         updateRunner={updateRunner}
         buyInstruction={buyInstruction}
-        selectRunner={selectRunner}
       />
     ),
 

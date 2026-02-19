@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { assemble } from '../vm/assembler.js'
 import { execute } from '../vm/interpreter.js'
-import { RACE, PROCESSOR_HZ, generateRace, getCarPosition, buildCircuitPath, buildPartialPath, CIRCUIT_WAYPOINTS } from '../race/circuit.js'
+import { RACE, PROCESSOR_HZ, generateRace, generateRace2, getCarPosition, buildCircuitPath, buildPartialPath, CIRCUIT_WAYPOINTS } from '../race/circuit.js'
+import { RACES } from '../data/races.js'
 import { playNavigate } from '../utils/sound.js'
 
 const CIRCUIT_PATH = buildCircuitPath()
@@ -95,20 +96,33 @@ function CircuitMap({ step, totalSteps }) {
   )
 }
 
-// ─── Slider ───────────────────────────────────────────────────────────────────
-function SliderControl({ value }) {
-  const pct = ((value - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN)) * 100
+// ─── Slider panel (multi-slot) ────────────────────────────────────────────────
+const SLIDER_LABELS = ['SLIDER_1', 'SLIDER_2', 'SLIDER_3']
+
+function SliderControl({ values, activeIndex, activeSlotIndices }) {
+  const multiSlider = activeSlotIndices.length > 1
   return (
     <div className="slider-panel">
-      <div className="slider-header">
-        <span className="slider-label">THRESHOLD</span>
-        <span className="slider-value accent">{value}</span>
+      {activeSlotIndices.map(i => {
+        const value = values[i]
+        const pct = ((value - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN)) * 100
+        const isFocused = multiSlider && i === activeIndex
+        return (
+          <div key={i} className={`slider-slot${isFocused ? ' focused' : ''}`}>
+            <div className="slider-header">
+              <span className="slider-label">{isFocused ? '► ' : ''}{SLIDER_LABELS[i]}</span>
+              <span className="slider-value accent">{value}</span>
+            </div>
+            <div className="slider-track">
+              <div className="slider-fill" style={{ width: `${pct}%` }} />
+              <div className="slider-thumb" style={{ left: `calc(${pct}% - 6px)` }} />
+            </div>
+          </div>
+        )
+      })}
+      <div className="slider-hint muted">
+        {multiSlider ? 'W/S switch · A/D ±1 · Shift ±10' : 'A/D ±1 · Shift ±10'} (during race)
       </div>
-      <div className="slider-track">
-        <div className="slider-fill" style={{ width: `${pct}%` }} />
-        <div className="slider-thumb" style={{ left: `calc(${pct}% - 6px)` }} />
-      </div>
-      <div className="slider-hint muted">A/D ±1 · Shift ±10 (during race)</div>
     </div>
   )
 }
@@ -164,7 +178,9 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
   const pb = personalBests?.[raceId]
 
   const [phase, setPhase] = useState('ready')
-  const [sliderValue, setSliderValue] = useState(0)
+  const [sliderValues, setSliderValues] = useState([50, 50, 50])
+  const [activeSlider, setActiveSlider] = useState(0)
+  const [activeSlotIndices, setActiveSlotIndices] = useState([0])
   const [step, setStep] = useState(0)
   const [unitIndex, setUnitIndex] = useState(0)
   const [correct, setCorrect] = useState(0)
@@ -180,8 +196,10 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
   const [chartPerSuccess, setChartPerSuccess] = useState([])
   const [chartPerFailure, setChartPerFailure] = useState([])
 
-  const sliderRef = useRef(sliderValue)
-  sliderRef.current = sliderValue
+  const sliderValuesRef = useRef(sliderValues)
+  sliderValuesRef.current = sliderValues
+  const activeSliderRef = useRef(activeSlider)
+  activeSliderRef.current = activeSlider
   const intervalRef = useRef(null)
   const chartIntervalRef = useRef(null)
   const stepRef = useRef(0)
@@ -194,34 +212,53 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
 
   useEffect(() => {
     const result = assemble(code)
-    if (result.errors.length > 0) setCompileError(result.errors)
-    else setCompiled(result)
-    setRaceData(generateRace())
+    if (result.errors.length > 0) { setCompileError(result.errors); return }
+    setCompiled(result)
+    setRaceData(raceId === 'circuit-02' ? generateRace2() : generateRace())
+    // Detect which SLIDER_N slots are used in the program
+    const usedSlots = new Set(
+      result.program
+        .filter(i => i.op === 'SLIDER_1' || i.op === 'SLIDER_2' || i.op === 'SLIDER_3')
+        .map(i => parseInt(i.op.slice(-1)) - 1)
+    )
+    const indices = [0, 1, 2].filter(i => usedSlots.has(i))
+    setActiveSlotIndices(indices.length > 0 ? indices : [0])
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Slider control: A/D (Shift for ±10)
+  // Slider control: A/D adjust active slider (Shift ±10), W/S switch active slot
   useEffect(() => {
     if (phase !== 'racing') return
     const handler = (e) => {
-      if (e.key === 'a') {
+      if (e.key === 'a' || e.key === 'd') {
         e.preventDefault()
         playNavigate()
-        setSliderValue(v => Math.max(SLIDER_MIN, v + (e.shiftKey ? -10 : -1)))
-      } else if (e.key === 'd') {
+        const delta = e.key === 'd' ? (e.shiftKey ? 10 : 1) : (e.shiftKey ? -10 : -1)
+        const cur = activeSliderRef.current
+        setSliderValues(prev => {
+          const next = [...prev]
+          next[cur] = Math.max(SLIDER_MIN, Math.min(SLIDER_MAX, prev[cur] + delta))
+          return next
+        })
+      } else if (e.key === 'w' || e.key === 's') {
         e.preventDefault()
-        playNavigate()
-        setSliderValue(v => Math.min(SLIDER_MAX, v + (e.shiftKey ? 10 : 1)))
+        if (activeSlotIndices.length <= 1) return
+        setActiveSlider(prev => {
+          const dir = e.key === 's' ? 1 : -1
+          const idx = activeSlotIndices.indexOf(prev)
+          const nextIdx = (idx + dir + activeSlotIndices.length) % activeSlotIndices.length
+          return activeSlotIndices[nextIdx]
+        })
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [phase])
+  }, [phase, activeSlotIndices])
 
   const processUnit = useCallback(() => {
     if (!compiled || !raceData) return
     const uIdx = unitIndexRef.current
     const unit = raceData.units[uIdx]
-    const execResult = execute({ program: compiled.program, labels: compiled.labels, arr: unit.arr, sliderValue: sliderRef.current, ownedInstructions })
+    const execResult = execute({ program: compiled.program, labels: compiled.labels, arr: unit.arr, sliderValues: sliderValuesRef.current, ownedInstructions })
     const returned = execResult.result ?? null
     const ok = returned !== null && returned === unit.expected
     const cycles = execResult.cycles || 0
@@ -265,6 +302,7 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
     setStep(0); setUnitIndex(0); setCorrect(0); setWrong(0); setTotalCycles(0)
     setLog([]); setFinalResult(null)
     setChartPerUnit([]); setChartPerSuccess([]); setChartPerFailure([])
+    setActiveSlider(0)
     setPhase('racing')
     intervalRef.current = setInterval(() => processUnit(), RACE.unitInterval)
     chartIntervalRef.current = setInterval(() => sampleChart(), CHART_INTERVAL_MS)
@@ -274,6 +312,7 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
 
   const unitsLeft = RACE.totalUnits - unitIndex
   const progressPct = (step / RACE.steps) * 100
+  const raceName = RACES[raceId]?.name ?? 'CIRCUIT'
 
   const handleBack = () => {
     clearInterval(intervalRef.current)
@@ -305,7 +344,7 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
       <div className="screen-header">
         <button className="btn-back" onClick={handleBack}>← BACK</button>
         <div className="screen-title">
-          CIRCUIT 01 — TIME ATTACK
+          {raceName} — TIME ATTACK
           {phase === 'racing' && <span className="racing-indicator"> ●</span>}
         </div>
         <div className="race-header-right">
@@ -379,7 +418,7 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
             <div className="metric"><div className="metric-val fail">{wrong}</div><div className="metric-label">WRONG</div></div>
           </div>
           <FuelBar remaining={unitsLeft} total={RACE.totalUnits} />
-          <SliderControl value={sliderValue} />
+          <SliderControl values={sliderValues} activeIndex={activeSlider} activeSlotIndices={activeSlotIndices} />
           <div className="log-panel">
             <div className="log-header muted">LAST RESULTS</div>
             {log.length === 0 && <div className="log-empty muted">Waiting for race to start…</div>}

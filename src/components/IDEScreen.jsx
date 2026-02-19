@@ -203,7 +203,8 @@ export default function IDEScreen({ state, setScreen, goBack, updateRunner, buyI
               <div><span className="kw">ADD</span>  r0, #1</div>
               <div><span className="kw">CMP</span>  r0, r1</div>
               <div><span className="kw">JGT</span>/<span className="kw">JLT</span>/<span className="kw">JEQ</span> label</div>
-              <div><span className="kw">SLIDER</span> r0</div>
+              <div><span className="kw">SLIDER_1</span> r0</div>
+              <div><span className="kw">SLIDER_2</span> r0</div>
               <div><span className="kw">RET</span>  r0</div>
             </div>
           </div>

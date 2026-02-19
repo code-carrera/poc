@@ -1,8 +1,8 @@
 import React from 'react'
 import { validateRunner } from '../utils/runner.js'
 
-export default function RunnersScreen({ state, setScreen, goBack, createRunner, deleteRunner, selectRunner, editRunner }) {
-  const { runners, selectedRunnerId, ownedInstructions } = state
+export default function RunnersScreen({ state, setScreen, goBack, createRunner, deleteRunner, editRunner }) {
+  const { runners, ownedInstructions } = state
 
   return (
     <div className="screen runners-screen">
@@ -21,10 +21,9 @@ export default function RunnersScreen({ state, setScreen, goBack, createRunner, 
         <div className="runner-list">
           {runners.map(runner => {
             const v = validateRunner(runner.code, ownedInstructions)
-            const isSelected = runner.id === selectedRunnerId
 
             return (
-              <div key={runner.id} className={`runner-card ${isSelected ? 'selected' : ''} ${v.ok ? '' : 'invalid'}`}>
+              <div key={runner.id} className={`runner-card ${v.ok ? '' : 'invalid'}`}>
                 <div className="runner-card-left">
                   <div className="runner-card-top">
                     <span className="runner-name">{runner.name}</span>
@@ -54,17 +53,6 @@ export default function RunnersScreen({ state, setScreen, goBack, createRunner, 
                 </div>
 
                 <div className="runner-card-actions">
-                  {isSelected ? (
-                    <span className="selected-badge">SELECTED</span>
-                  ) : (
-                    <button
-                      className="btn-select"
-                      onClick={() => selectRunner(runner.id)}
-                      title="Select for racing"
-                    >
-                      SELECT
-                    </button>
-                  )}
                   <button
                     className="btn-edit"
                     onClick={() => editRunner(runner.id)}

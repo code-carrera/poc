@@ -1,7 +1,7 @@
 import { useReducer, useCallback } from 'react'
-import { STARTING_CREDITS, DEFAULT_CODE } from '../data/instructions.js'
+import { STARTING_CREDITS, DEFAULT_CODE, DEFAULT_CODE_2 } from '../data/instructions.js'
 
-const STORAGE_KEY = 'code-carrera-state-v2'
+const STORAGE_KEY = 'code-carrera-state-v3'
 
 function makeRunner(overrides = {}) {
   return {
@@ -38,15 +38,15 @@ function persist(state) {
   } catch {}
 }
 
-const defaultRunner = makeRunner({ id: 'runner-default', name: 'Runner v1' })
+const defaultRunner  = makeRunner({ id: 'runner-default',   name: 'Runner v1', code: DEFAULT_CODE })
+const defaultRunner2 = makeRunner({ id: 'runner-circuit2',  name: 'Runner v2', code: DEFAULT_CODE_2 })
 
 const freshState = {
   screen: 'garage',
   credits: STARTING_CREDITS,
   ownedInstructions: new Set(),
-  runners: [defaultRunner],
+  runners: [defaultRunner, defaultRunner2],
   editingRunnerId: null,        // runner open in IDE
-  selectedRunnerId: 'runner-default', // legacy: used by RunnersScreen SELECT badge
   challengeRunnerIds: {},       // { raceId: runnerId } — runner chosen per challenge
   currentRaceId: null,          // race being prepared / running
   personalBests: {},            // { 'circuit-01': { unitsUsed, totalCycles, correct, date } }
@@ -109,14 +109,9 @@ function reducer(state, action) {
         ...state,
         runners,
         editingRunnerId: state.editingRunnerId === action.id ? null : state.editingRunnerId,
-        selectedRunnerId: state.selectedRunnerId === action.id ? runners[0]?.id ?? null : state.selectedRunnerId,
       }
       break
     }
-
-    case 'SELECT_RUNNER':
-      next = { ...state, selectedRunnerId: action.id }
-      break
 
     case 'SET_CHALLENGE_RUNNER':
       next = {
@@ -176,7 +171,6 @@ export function useGameState() {
     createRunner:     useCallback(() => dispatch({ type: 'CREATE_RUNNER' }), []),
     updateRunner:     useCallback((id, patch) => dispatch({ type: 'UPDATE_RUNNER', id, patch }), []),
     deleteRunner:     useCallback(id => dispatch({ type: 'DELETE_RUNNER', id }), []),
-    selectRunner:     useCallback(id => dispatch({ type: 'SELECT_RUNNER', id }), []),
     editRunner:       useCallback(id => dispatch({ type: 'EDIT_RUNNER', id }), []),
     raceFinished:        useCallback((raceId, result, reward) => dispatch({ type: 'RACE_FINISHED', raceId, result, reward }), []),
     visitManual:         useCallback(() => dispatch({ type: 'VISIT_MANUAL' }), []),
