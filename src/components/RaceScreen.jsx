@@ -96,14 +96,23 @@ function CircuitMap({ step, totalSteps }) {
   )
 }
 
-// ─── Slider panel (multi-slot) ────────────────────────────────────────────────
+// ─── Slider + Toggle panel (3+3 always-reserved slots) ───────────────────────
 const SLIDER_LABELS = ['SLIDER_1', 'SLIDER_2', 'SLIDER_3']
+const TOGGLE_LABELS = ['TOGGLE_1', 'TOGGLE_2', 'TOGGLE_3']
 
 function SliderControl({ values, activeIndex, activeSlotIndices }) {
   const multiSlider = activeSlotIndices.length > 1
   return (
     <div className="slider-panel">
-      {activeSlotIndices.map(i => {
+      {[0, 1, 2].map(i => {
+        const isActive = activeSlotIndices.includes(i)
+        if (!isActive) {
+          return (
+            <div key={i} className="ctrl-slot-empty">
+              <span className="ctrl-slot-label">{SLIDER_LABELS[i]}</span>
+            </div>
+          )
+        }
         const value = values[i]
         const pct = ((value - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN)) * 100
         const isFocused = multiSlider && i === activeIndex
@@ -120,6 +129,11 @@ function SliderControl({ values, activeIndex, activeSlotIndices }) {
           </div>
         )
       })}
+      {TOGGLE_LABELS.map(label => (
+        <div key={label} className="ctrl-slot-empty">
+          <span className="ctrl-slot-label">{label}</span>
+        </div>
+      ))}
       <div className="slider-hint muted">
         {multiSlider ? 'W/S switch · A/D ±1 · Shift ±10' : 'A/D ±1 · Shift ±10'} (during race)
       </div>
@@ -312,7 +326,6 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
   useEffect(() => () => { clearInterval(intervalRef.current); clearInterval(chartIntervalRef.current) }, [])
 
   const unitsLeft = RACE.totalUnits - unitIndex
-  const progressPct = (step / RACE.steps) * 100
   const raceName = RACES[raceId]?.name ?? 'CIRCUIT'
 
   const handleBack = () => {
@@ -329,7 +342,7 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
       <div className="screen race-screen">
         <div className="screen-header">
           <button className="btn-back" onClick={handleBack}>← BACK</button>
-          <div className="screen-title">CIRCUIT 01</div>
+          <div className="screen-title">{raceName}</div>
         </div>
         <div className="compile-error-panel">
           <div className="compile-error-title">Compile Error</div>
@@ -374,25 +387,30 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
             </div>
           </div>
 
-          <div className="progress-bar-wrap">
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${progressPct}%` }} />
-            </div>
-            <div className="progress-labels muted"><span>0</span><span>FINISH</span></div>
+          <button
+            className="btn-primary btn-start"
+            disabled={!compiled}
+            onClick={startRace}
+            style={phase !== 'ready' ? { visibility: 'hidden' } : undefined}
+          >
+            START
+          </button>
+        </div>
+
+        {/* Right: metrics + fuel + sliders + log / result */}
+        <div className="race-right">
+          <div className="metrics-grid-2">
+            <div className="metric"><div className="metric-val ok">{correct}</div><div className="metric-label">HIT</div></div>
+            <div className="metric"><div className="metric-val fail">{wrong}</div><div className="metric-label">MISS</div></div>
           </div>
-
-          {phase === 'ready' && (
-            <button className="btn-primary btn-start" disabled={!compiled} onClick={startRace}>
-              START
-            </button>
-          )}
-
-          {(phase === 'finished' || phase === 'dnf') && finalResult && (
-            <div className={`result-panel ${phase}`}>
+          <FuelBar remaining={unitsLeft} total={RACE.totalUnits} />
+          <SliderControl values={sliderValues} activeIndex={activeSlider} activeSlotIndices={activeSlotIndices} />
+          {phase === 'finished' || phase === 'dnf' ? (
+            <div className={`result-panel ${phase} result-panel-right`}>
               <div className="result-panel-title">
                 {phase === 'finished' ? '🏁 FINISHED' : '⛔ DNF'}
               </div>
-              {phase === 'finished' && (
+              {phase === 'finished' && finalResult && (
                 <>
                   <div className="result-stat"><span>Units used</span><span className="accent">{finalResult.unitsUsed}</span></div>
                   <div className="result-stat"><span>Total cycles</span><span>{finalResult.totalCycles.toLocaleString()}</span></div>
@@ -409,22 +427,13 @@ export default function RaceScreen({ state, setScreen, goBack, raceFinished }) {
                 <button className="btn-ghost" onClick={goBack}>CHALLENGES</button>
               </div>
             </div>
+          ) : (
+            <div className="log-panel">
+              <div className="log-header muted">LAST RESULTS</div>
+              {log.length === 0 && <div className="log-empty muted">Waiting for race to start…</div>}
+              {log.map((entry, i) => <ResultRow key={i} entry={entry} />)}
+            </div>
           )}
-        </div>
-
-        {/* Right: metrics + fuel + slider + log */}
-        <div className="race-right">
-          <div className="metrics-grid-2">
-            <div className="metric"><div className="metric-val ok">{correct}</div><div className="metric-label">CORRECT</div></div>
-            <div className="metric"><div className="metric-val fail">{wrong}</div><div className="metric-label">WRONG</div></div>
-          </div>
-          <FuelBar remaining={unitsLeft} total={RACE.totalUnits} />
-          <SliderControl values={sliderValues} activeIndex={activeSlider} activeSlotIndices={activeSlotIndices} />
-          <div className="log-panel">
-            <div className="log-header muted">LAST RESULTS</div>
-            {log.length === 0 && <div className="log-empty muted">Waiting for race to start…</div>}
-            {log.map((entry, i) => <ResultRow key={i} entry={entry} />)}
-          </div>
         </div>
       </div>
     </div>
